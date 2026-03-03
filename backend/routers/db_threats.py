@@ -16,7 +16,7 @@ from sqlalchemy import func, distinct
 from pydantic import BaseModel
 
 from database import get_db
-from models import Transaction, CyberLog, FrozenAccount
+from models import Transaction, CyberLog, FrozenAccount, BankAccount, LiveAttackLog
 
 router = APIRouter(prefix="/api/v1", tags=["Threats (SQL)"])
 
@@ -174,6 +174,64 @@ async def get_threats(db: Session = Depends(get_db)):
             notes=[],
         ))
 
+    # ── Include LiveAttackLog entries as real threats ──
+    _risk_map = {
+        "MULE_RING_DETECTED": "CRITICAL",
+        "BRUTE_FORCE": "HIGH",
+        "RAPID_TRANSFERS": "HIGH",
+        "TRANSFER_ATTEMPT": "HIGH",
+        "GEO_ANOMALY": "MEDIUM",
+    }
+    _title_map = {
+        "BRUTE_FORCE": "🔐 Brute Force Attack",
+        "GEO_ANOMALY": "🌍 Geographic Anomaly",
+        "RAPID_TRANSFERS": "⚡ Rapid-Fire Transfers",
+        "MULE_RING_DETECTED": "🕸️ Mule Ring Confirmed",
+        "TRANSFER_ATTEMPT": "💸 Sandbox Transfer Captured",
+    }
+
+    attack_logs = (
+        db.query(LiveAttackLog)
+        .order_by(LiveAttackLog.timestamp.desc())
+        .limit(50)
+        .all()
+    )
+
+    for atk in attack_logs:
+        risk_level = _risk_map.get(atk.event_type, "MEDIUM")
+        title_prefix = _title_map.get(atk.event_type, atk.event_type)
+        amount = atk.amount or 0
+
+        threats.append(ThreatResponse(
+            id=atk.event_id,
+            title=f"{title_prefix} — {atk.target_account or 'Unknown'}",
+            risk_level=risk_level,
+            status=atk.status or "Detected",
+            timestamp=atk.timestamp.isoformat() + "Z" if atk.timestamp else datetime.now(timezone.utc).isoformat(),
+            threat_data={
+                "confidence_score": atk.risk_score or 0.85,
+                "breach_details": {
+                    "alert_type": atk.event_type,
+                    "severity": risk_level.lower(),
+                    "account_id": atk.target_account,
+                    "ip_address": atk.attacker_ip,
+                    "description": atk.details,
+                },
+                "transaction_details": {
+                    "tx_id": atk.event_id,
+                    "sender_id": atk.target_account,
+                    "receiver_id": atk.destination_account,
+                    "receiver_name": atk.destination_name,
+                    "amount": amount,
+                    "currency": "INR",
+                    "transfer_method": atk.transfer_method or "N/A",
+                    "status": atk.status,
+                },
+                "linkage_evidence": [atk.details] if atk.details else [],
+            },
+            notes=[],
+        ))
+
     return threats
 
 
@@ -294,21 +352,38 @@ async def get_system_risk_score(db: Session = Depends(get_db)):
     total_amount_flagged = db.query(func.sum(Transaction.amount)).filter(Transaction.is_flagged == True).scalar() or 0
     high_sev_logs = db.query(func.count(CyberLog.id)).filter(CyberLog.severity.in_(["critical", "high"])).scalar()
 
-    # Mule ring probability: weighted composite
+    # Bank account attack data
+    total_accounts = db.query(func.count(BankAccount.id)).scalar() or 0
+    accounts_under_attack = db.query(func.count(BankAccount.id)).filter(BankAccount.is_under_attack == True).scalar() or 0
+    active_attacks = db.query(func.count(LiveAttackLog.id)).scalar() or 0
+    sandbox_attacks = db.query(func.count(LiveAttackLog.id)).filter(LiveAttackLog.status == "SANDBOX_REDIRECT").scalar() or 0
+    total_attack_amount = db.query(func.sum(LiveAttackLog.amount)).scalar() or 0
+
+    # Mule ring probability: weighted composite including attack data
     ratio = total_flagged / max(total_txns, 1)
     ip_factor = min(shared_ips / 5, 1.0)
-    amount_factor = min(total_amount_flagged / 5000000, 1.0)
+    amount_factor = min((total_amount_flagged + total_attack_amount) / 5000000, 1.0)
     log_factor = min(high_sev_logs / 30, 1.0)
+    attack_factor = min(active_attacks / 10, 1.0) if active_attacks > 0 else 0
 
-    probability = min(ratio * 0.2 + ip_factor * 0.35 + amount_factor * 0.25 + log_factor * 0.2, 1.0)
+    probability = min(ratio * 0.15 + ip_factor * 0.25 + amount_factor * 0.20 + log_factor * 0.15 + attack_factor * 0.25, 1.0)
+
+    # CVSS-style risk score (0-10)
+    cvss_score = round(probability * 10, 1)
 
     return {
         "mule_ring_probability": round(probability, 4),
-        "total_threats_analyzed": total_flagged,
+        "cvss_risk_score": cvss_score,
+        "total_threats_analyzed": total_flagged + active_attacks,
+        "active_threats": active_attacks,
         "high_confidence_threats": shared_ips,
         "avg_confidence": round(ratio, 4),
-        "total_flagged_amount_inr": round(total_amount_flagged, 2),
+        "total_flagged_amount_inr": round(total_amount_flagged + total_attack_amount, 2),
         "high_severity_logs": high_sev_logs,
+        "total_accounts": total_accounts,
+        "accounts_under_attack": accounts_under_attack,
+        "affected_entities": accounts_under_attack,
+        "sandbox_attacks": sandbox_attacks,
         "timestamp": datetime.now(timezone.utc).isoformat(),
     }
 
@@ -339,3 +414,45 @@ async def freeze_accounts(payload: dict, db: Session = Depends(get_db)):
         "message": f"Successfully frozen {len(frozen)} account(s). SAR filing initiated.",
         "timestamp": datetime.now(timezone.utc).isoformat(),
     }
+
+
+@router.get("/city-stats")
+async def get_city_stats(db: Session = Depends(get_db)):
+    """Aggregate threat data by Indian city for the heatmap visualization."""
+    # Flagged transactions per city
+    city_threats = (
+        db.query(
+            Transaction.city,
+            func.count(Transaction.id).label("threat_count"),
+            func.sum(Transaction.amount).label("total_amount"),
+        )
+        .filter(Transaction.is_flagged == True, Transaction.city.isnot(None))
+        .group_by(Transaction.city)
+        .all()
+    )
+
+    # Cyber logs per city
+    city_logs = (
+        db.query(
+            CyberLog.city,
+            func.count(CyberLog.id).label("log_count"),
+        )
+        .filter(CyberLog.city.isnot(None))
+        .group_by(CyberLog.city)
+        .all()
+    )
+
+    log_map = {row.city: row.log_count for row in city_logs}
+
+    results = []
+    for row in city_threats:
+        results.append({
+            "city": row.city,
+            "threat_count": row.threat_count,
+            "cyber_log_count": log_map.get(row.city, 0),
+            "total_flagged_amount": round(row.total_amount or 0, 2),
+        })
+
+    # Sort by threat_count descending
+    results.sort(key=lambda x: x["threat_count"], reverse=True)
+    return results

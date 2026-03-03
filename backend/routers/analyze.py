@@ -172,20 +172,38 @@ async def analyze_threat(req: AnalyzeRequest, db: Session = Depends(get_db)):
             genai.configure(api_key=api_key)
             model = genai.GenerativeModel("gemini-2.0-flash")
 
-            prompt = f"""You are an elite threat analyst in a Unified SOC-AML Risk Engine for an Indian financial institution.
-Analyze the following threat data and produce a concise, actionable threat narrative.
+            prompt = f"""You are an elite SOC-AML threat intelligence analyst at an Indian financial institution's Unified Threat Operations Center.
 
+THREAT CONTEXT:
 {context}
 
-Analyst Query: {req.message or "Provide a complete threat analysis."}
+ANALYST QUERY: {req.message or "Full threat assessment."}
 
-Guidelines:
-- Use Indian financial context (INR, UPI, IMPS, NEFT, Aadhaar, PAN)
-- Explain the breach→financial linkage clearly
-- Highlight IP correlations and temporal proximity
-- Recommend specific actions (freeze, SAR filing, watchlist)
-- Use markdown formatting with headers, bold, bullets
-- Be concise and authoritative"""
+OUTPUT FORMAT — respond in compact, structured markdown:
+
+## 🔴 THREAT CLASSIFICATION
+One line: attack type, severity (CRITICAL/HIGH/MEDIUM), confidence %.
+
+## 📊 INTEL SUMMARY
+3–5 bullet points max. Each bullet = one key finding. Be precise:
+- Breach vector and entry point
+- Financial flow: who → who, ₹amount, method (UPI/IMPS/NEFT)
+- IP correlation: shared IPs, TOR nodes, VPN detected
+- Temporal link: time gap between cyber alert → financial transfer
+- Mule ring indicators: layered transfers, rapid succession
+
+## ⚡ IMMEDIATE ACTIONS
+Numbered list, 3–4 items max. Be specific (account IDs, IPs, UPI handles to block).
+
+## 🎯 RISK VERDICT
+One concise paragraph: Is this a confirmed mule ring? What's the financial exposure? What's the escalation path (RBI SAR, FIU-IND, cyber cell)?
+
+RULES:
+- Indian financial context only (INR, UPI, IMPS, NEFT, Aadhaar, PAN, RBI, FIU-IND)
+- NO filler text, NO disclaimers, NO "please note"
+- Maximum 200 words total. Compact = intelligence, not essays
+- Use bold for key values: **amounts**, **IPs**, **account IDs**
+- Think like a cyber-forensics officer briefing a SAR filing team"""
 
             result = model.generate_content(prompt)
             narrative = result.text
@@ -212,3 +230,132 @@ Guidelines:
         request_hash=request_hash,
         timestamp=datetime.now(timezone.utc).isoformat(),
     )
+
+
+# ── Account Report Endpoint ──────────────────────────────────
+class AccountReportRequest(BaseModel):
+    account_number: str
+
+
+@router.post("/account-report")
+async def generate_account_report(req: AccountReportRequest, db: Session = Depends(get_db)):
+    """Generate a Gemini AI risk report for a specific bank account."""
+    from models import BankAccount, LiveAttackLog, LoginVerification
+
+    account = db.query(BankAccount).filter(BankAccount.account_number == req.account_number).first()
+    if not account:
+        raise HTTPException(status_code=404, detail="Account not found")
+
+    # Gather attack logs
+    attacks = db.query(LiveAttackLog).filter(
+        LiveAttackLog.target_account == req.account_number
+    ).order_by(LiveAttackLog.timestamp.desc()).limit(20).all()
+
+    # Gather login verifications
+    verifications = db.query(LoginVerification).filter(
+        LoginVerification.account_number == req.account_number
+    ).order_by(LoginVerification.timestamp.desc()).limit(10).all()
+
+    # Gather transactions (use user_id and receiver_id, not sender_account)
+    txns = db.query(Transaction).filter(
+        (Transaction.user_id == req.account_number) |
+        (Transaction.receiver_id == req.account_number)
+    ).order_by(Transaction.timestamp.desc()).limit(20).all()
+
+    # Build context
+    context_parts = [
+        f"## Account Profile",
+        f"- Holder: {account.holder_name}",
+        f"- Account Number: {account.account_number}",
+        f"- Balance: ₹{account.balance:,.2f}",
+        f"- Phone: {account.phone}",
+        f"- Email: {account.email}",
+        f"- IFSC: {account.ifsc}",
+        f"- Branch City: {account.city}",
+        f"- Under Attack: {'YES' if account.is_under_attack else 'No'}",
+        f"\n## Attack History ({len(attacks)} events)",
+    ]
+
+    for a in attacks:
+        context_parts.append(f"- [{a.event_type}] IP: {a.attacker_ip} | Amount: ₹{a.amount or 0} | Status: {a.status} | {a.timestamp}")
+
+    context_parts.append(f"\n## Login Verifications ({len(verifications)} records)")
+    for v in verifications:
+        context_parts.append(f"- Status: {v.status} | IP: {v.login_ip} | {v.timestamp}")
+
+    context_parts.append(f"\n## Transaction History ({len(txns)} records)")
+    for t in txns:
+        context_parts.append(f"- {t.user_id} → {t.receiver_id or 'N/A'} | ₹{t.amount:,.2f} | {'FLAGGED' if t.is_flagged else 'OK'} | {t.timestamp}")
+
+    context = "\n".join(context_parts)
+
+    # Generate report with Gemini
+    api_key = os.getenv("GOOGLE_API_KEY", "")
+    report = ""
+
+    if api_key:
+        try:
+            import google.generativeai as genai
+            genai.configure(api_key=api_key)
+            model = genai.GenerativeModel("gemini-2.0-flash")
+
+            prompt = f"""You are an elite SOC-AML risk analyst at an Indian bank. Generate a comprehensive risk report for this bank account.
+
+{context}
+
+Provide your analysis in this structure:
+## Account Risk Summary
+Brief overview of the account holder and current risk status.
+
+## Security Assessment
+- Login pattern analysis
+- Attack history review
+- Vulnerability assessment
+
+## Transaction Analysis
+- Transaction patterns
+- Suspicious activities if any
+- Fund flow summary
+
+## Risk Score & Recommendation
+- Overall risk rating (LOW / MEDIUM / HIGH / CRITICAL)
+- Recommended actions
+- Compliance notes
+
+Keep it concise but thorough. Use bullet points. Use Indian financial terminology (INR, UPI, IMPS, NEFT, RBI, FIU-IND)."""
+
+            response = model.generate_content(prompt)
+            report = response.text
+            logger.info(f"Account report generated for {req.account_number}")
+        except Exception as e:
+            logger.warning(f"Gemini failed for account report: {e}")
+            report = _generate_fallback_account_report(account, attacks, verifications, txns)
+    else:
+        report = _generate_fallback_account_report(account, attacks, verifications, txns)
+
+    return {"report": report, "account_number": req.account_number}
+
+
+def _generate_fallback_account_report(account, attacks, verifications, txns):
+    """Local fallback when Gemini is unavailable."""
+    risk = "CRITICAL" if account.is_under_attack else ("HIGH" if len(attacks) > 0 else "LOW")
+    return f"""## Account Risk Summary
+**{account.holder_name}** — A/C {account.account_number}
+Balance: ₹{account.balance:,.2f} | Branch: {account.city} ({account.ifsc})
+Current Status: {'⚠️ UNDER ACTIVE ATTACK' if account.is_under_attack else '✅ Secure'}
+
+## Security Assessment
+- Total login verifications: {len(verifications)}
+- Attack events detected: {len(attacks)}
+- {'Unauthorized access attempts detected — account may be compromised' if attacks else 'No unauthorized access detected'}
+
+## Transaction Analysis
+- Total transactions on record: {len(txns)}
+- {'Suspicious transaction patterns require investigation' if account.is_under_attack else 'No suspicious patterns detected'}
+
+## Risk Score: {risk}
+- {'Immediate action required — freeze account and investigate' if risk == 'CRITICAL' else 'Standard monitoring recommended'}
+- Report to FIU-IND if suspicious activity confirmed
+
+*Generated locally — AI-enhanced analysis available when Gemini service is connected.*"""
+

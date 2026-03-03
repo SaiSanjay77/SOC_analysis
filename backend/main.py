@@ -91,9 +91,12 @@ app.add_middleware(
 
 # ── Routers ─────────────────────────────────────────────────────
 # Primary SQL-backed routers
-from routers import db_threats, analyze
+from routers import db_threats, analyze, sandbox, bank_portal, bank_server
 app.include_router(db_threats.router)
 app.include_router(analyze.router)
+app.include_router(sandbox.router)
+app.include_router(bank_portal.router)
+app.include_router(bank_server.router)
 
 # Legacy graph routers (optional, for backwards compat)
 try:

@@ -1,0 +1,273 @@
+================================================================================
+                        SOC-AML RISK ENGINE
+              Intelligent Anti-Money Laundering & Threat Response System
+================================================================================
+
+Project Name  : SOC-AML Risk Engine — Mirror Sandbox Defense Framework
+Team Name     : [YOUR TEAM NAME]
+Built For     : Hackathon 2026
+
+================================================================================
+                         1. PROJECT OVERVIEW
+================================================================================
+
+SOC-AML Risk Engine is an AI-powered Security Operations Center (SOC) platform
+designed for the Indian banking sector to detect, trap, and analyze financial
+fraud in real-time. Unlike traditional fraud prevention systems that simply
+block suspicious transactions, our system introduces a revolutionary concept
+called the "Mirror Sandbox" — a deception-based defense mechanism that silently
+traps attackers in a fake banking environment while recording every action they
+take for forensic analysis.
+
+The platform combines real-time threat detection, email-based login
+verification, AI-driven risk assessment (powered by Google Gemini), and a
+comprehensive SOC analyst dashboard — all built as a working prototype with
+real email verification, real account management, and live attack simulation.
+
+================================================================================
+                     2. THE PROBLEM WE SOLVE
+================================================================================
+
+Traditional banking security systems have a critical flaw:
+
+  → When they detect a suspicious login, they BLOCK the attacker.
+  → The attacker KNOWS they've been caught.
+  → They switch to a new IP, new device, new identity — and try again.
+  → The bank learns NOTHING about the attacker's intent or network.
+
+This creates an endless cat-and-mouse game where defenders are always
+one step behind.
+
+Additionally:
+  • Mule account networks are hard to trace because attackers use multiple
+    intermediary accounts to layer stolen funds.
+  • SOC analysts are overwhelmed with alerts and lack contextual intelligence
+    to quickly assess which threats are real.
+  • Existing systems cannot capture attacker behavior patterns for proactive
+    defense.
+
+================================================================================
+                  3. OUR SOLUTION: THE MIRROR SANDBOX
+================================================================================
+
+Instead of blocking attackers, we TRAP them.
+
+Here's how the Mirror Sandbox works:
+
+  ┌─────────────────────────────────────────────────────────────────────┐
+  │                    THE MIRROR SANDBOX FLOW                         │
+  ├─────────────────────────────────────────────────────────────────────┤
+  │                                                                     │
+  │  1. ATTACKER logs into a victim's bank account                     │
+  │     ↓                                                               │
+  │  2. SYSTEM sends verification email to real account holder         │
+  │     (Attacker sees a generic loading screen — no indication         │
+  │      of email verification happening)                               │
+  │     ↓                                                               │
+  │  3. REAL USER clicks "No, BLOCK them!" in the email                │
+  │     ↓                                                               │
+  │  4. Instead of showing "Access Denied" to the attacker...          │
+  │     THE SYSTEM SHOWS "✅ Verified! Loading your account..."        │
+  │     ↓                                                               │
+  │  5. ATTACKER enters a PERFECT REPLICA of the banking dashboard     │
+  │     - Sees fake balance (looks real)                                │
+  │     - Can initiate transfers (all fake, none execute)               │
+  │     - Thinks they have full access                                  │
+  │     ↓                                                               │
+  │  6. EVERY ACTION is silently recorded:                             │
+  │     - Destination accounts (reveals mule network)                   │
+  │     - Transfer amounts (reveals intent)                             │
+  │     - Timing patterns (reveals automation)                          │
+  │     - IP addresses (reveals location)                               │
+  │     ↓                                                               │
+  │  7. SOC DASHBOARD shows real-time attack feed to analysts          │
+  │     with AI-generated risk reports per account                      │
+  │                                                                     │
+  └─────────────────────────────────────────────────────────────────────┘
+
+WHY THIS IS REVOLUTIONARY:
+  • Attacker NEVER knows they've been caught
+  • We extract COMPLETE intelligence about their mule network
+  • Real account remains 100% safe — zero financial impact
+  • SOC team has time to analyze and respond strategically
+  • Evidence collected is forensically sound for law enforcement
+
+================================================================================
+                   4. ADVANCED ATTACK DETECTION
+================================================================================
+
+The system implements 4 automated attack detection mechanisms that trigger
+in real-time without any manual intervention:
+
+  ┌──────────────────────────────────────────────────────────────────┐
+  │  DETECTION          │  TRIGGER                │  RISK LEVEL     │
+  ├──────────────────────────────────────────────────────────────────┤
+  │  🔐 Brute Force     │  3+ wrong passwords     │  HIGH (0.88)    │
+  │                      │  within 5 minutes       │                 │
+  ├──────────────────────────────────────────────────────────────────┤
+  │  🌍 Geo-Anomaly     │  Login IP differs from  │  MEDIUM (0.72)  │
+  │                      │  account's registered   │                 │
+  │                      │  city/location           │                 │
+  ├──────────────────────────────────────────────────────────────────┤
+  │  ⚡ Rapid-Fire       │  3+ transfers within    │  HIGH (0.92)    │
+  │     Transfers        │  2 minutes (sandbox)    │                 │
+  ├──────────────────────────────────────────────────────────────────┤
+  │  🕸️ Cross-Account   │  Same destination       │  CRITICAL       │
+  │     Mule Ring        │  account targeted from  │  (0.99)         │
+  │                      │  2+ different sources    │                 │
+  └──────────────────────────────────────────────────────────────────┘
+
+Each detection automatically creates a LiveAttackLog entry that appears
+instantly in the SOC dashboard as an active threat.
+
+================================================================================
+                      5. SYSTEM ARCHITECTURE
+================================================================================
+
+  ┌────────────────────────────────────────────────────────────────────┐
+  │                         FRONTEND                                   │
+  │  Next.js Dashboard (Port 3001)                                     │
+  │  ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌──────────┐             │
+  │  │ Overview  │ │ Accounts │ │  Money   │ │ Vectors  │  ...        │
+  │  │ Tab       │ │ Tab      │ │ Addons   │ │ Tab      │             │
+  │  └──────────┘ └──────────┘ └──────────┘ └──────────┘             │
+  │  • CVSS Risk Score    • AI Reports (Gemini)   • Mule Map          │
+  │  • Active Threats     • Account Status        • City Heatmap      │
+  │  • Affected Entities  • Attack Logs           • Threat Timeline   │
+  └────────────────────────────────────────────────────────────────────┘
+                              │ REST API │
+  ┌────────────────────────────────────────────────────────────────────┐
+  │                         BACKEND                                    │
+  │  FastAPI Server (Port 8000)                                        │
+  │  ┌──────────────────────────────────────────────────────────────┐  │
+  │  │ Bank Server Portal (/bankserver)                             │  │
+  │  │  • Account Registration    • Email Verification              │  │
+  │  │  • Login + Mirror Sandbox  • Transfer (Real + Fake)          │  │
+  │  │  • Brute Force Detection   • Geo-Anomaly Detection           │  │
+  │  │  • Rapid-Fire Detection    • Mule Ring Detection             │  │
+  │  └──────────────────────────────────────────────────────────────┘  │
+  │  ┌──────────────────────────────────────────────────────────────┐  │
+  │  │ Threat Engine (/api/v1/threats)                              │  │
+  │  │  • Flagged Transaction Analysis                              │  │
+  │  │  • LiveAttackLog → Real-Time Threat Objects                  │  │
+  │  │  • CVSS Risk Score Calculation                               │  │
+  │  └──────────────────────────────────────────────────────────────┘  │
+  │  ┌──────────────────────────────────────────────────────────────┐  │
+  │  │ AI Engine (/api/v1/account-report)                           │  │
+  │  │  • Google Gemini Integration                                 │  │
+  │  │  • Per-Account Risk Reports                                  │  │
+  │  │  • Context: Attacks + Verifications + Transactions           │  │
+  │  └──────────────────────────────────────────────────────────────┘  │
+  └────────────────────────────────────────────────────────────────────┘
+                              │
+  ┌────────────────────────────────────────────────────────────────────┐
+  │                       DATABASE (SQLite)                             │
+  │  BankAccount │ LoginVerification │ LiveAttackLog │ Transaction     │
+  │  CyberLog    │ FrozenAccount     │                                 │
+  └────────────────────────────────────────────────────────────────────┘
+
+================================================================================
+                     6. KEY FEATURES
+================================================================================
+
+  ✅  REAL EMAIL VERIFICATION
+      • SMTP integration with Gmail
+      • HTML emails with Approve/Reject buttons
+      • One-click verification from any device on same network
+
+  ✅  MIRROR SANDBOX DEFENSE
+      • Attackers trapped in fake but realistic environment
+      • All actions recorded for forensic analysis
+      • Zero impact on real account balance
+
+  ✅  AI-POWERED RISK REPORTS (Google Gemini)
+      • Per-account risk assessment
+      • Analyzes attack logs, login patterns, transactions
+      • Natural language security briefing for SOC analysts
+
+  ✅  REAL-TIME SOC DASHBOARD
+      • CVSS Risk Score (0-10) calculated from real data
+      • Active threats with live attack feed
+      • Mule Account Network Map visualization
+      • City-based heatmap of suspicious activity
+      • Affected entities tracking
+
+  ✅  BANK OFFICIAL TOOLS
+      • Money Addons tab for adding/withdrawing funds
+      • Account management with credential verification
+      • Balance validation on all transfers
+
+  ✅  4-LAYER AUTOMATED DETECTION
+      • Brute force | Geo-anomaly | Rapid-fire | Mule ring
+
+================================================================================
+                     7. WHAT MAKES US UNIQUE
+================================================================================
+
+  ┌──────────────────────────────────────────────────────────────────┐
+  │  TRADITIONAL SYSTEMS           │  OUR MIRROR SANDBOX            │
+  ├──────────────────────────────────────────────────────────────────┤
+  │  Block the attacker            │  TRAP the attacker              │
+  │  Attacker knows they're caught │  Attacker thinks they succeeded│
+  │  No intelligence gathered      │  FULL mule network exposed     │
+  │  Static rule-based detection   │  AI-powered real-time analysis │
+  │  Alert fatigue for SOC team    │  Contextual threat dashboard   │
+  │  Reactive defense              │  PROACTIVE intelligence        │
+  │  Evidence is limited           │  Complete forensic trail       │
+  └──────────────────────────────────────────────────────────────────┘
+
+  The Mirror Sandbox concept is inspired by cybersecurity "honeypots" but
+  adapted specifically for banking fraud. While honeypots are passive
+  decoys, our Mirror Sandbox is an ACTIVE DECEPTION SYSTEM that:
+
+  1. Dynamically creates a sandboxed environment per-attacker
+  2. Mirrors the real account data (balance, name) for authenticity
+  3. Captures structured intelligence (not just logs)
+  4. Feeds directly into the SOC analyst workflow
+  5. Enables cross-account mule ring detection through pattern analysis
+
+================================================================================
+                     8. TECHNOLOGY STACK
+================================================================================
+
+  Frontend    :  Next.js 15, React 19, TailwindCSS, TypeScript
+  Backend     :  FastAPI (Python), SQLAlchemy ORM
+  Database    :  SQLite (prototype, scales to PostgreSQL)
+  AI Engine   :  Google Gemini 2.0 Flash API
+  Email       :  SMTP (Gmail) with HTML templates
+  Deployment  :  Local development (uvicorn + next dev)
+
+================================================================================
+                     9. INDIAN BANKING CONTEXT
+================================================================================
+
+  This system is specifically designed for the Indian financial ecosystem:
+
+  • Account numbers follow Indian banking format
+  • IFSC codes for inter-bank transfers
+  • UPI integration for digital payments
+  • INR (₹) currency throughout
+  • City-level geographic analysis across Indian cities
+  • Compliance-ready for RBI AML guidelines
+  • SAR (Suspicious Activity Report) filing integration
+
+================================================================================
+                     10. DEMO FLOW
+================================================================================
+
+  STEP 1: Create a bank account on /bankserver
+  STEP 2: Login from another device → email sent to account holder
+  STEP 3: Account holder clicks "No, BLOCK" → attacker is sandboxed
+  STEP 4: Attacker sees fake dashboard, does transfers → all recorded
+  STEP 5: SOC Dashboard shows real-time threats:
+          🔐 Brute Force | 🌍 Geo-Anomaly | ⚡ Rapid-Fire | 🕸️ Mule Ring
+  STEP 6: Click on Accounts tab → AI generates risk report per account
+  STEP 7: Mule Map shows attacker's network connections
+
+================================================================================
+
+  "Don't just block them. Trap them. Learn from them. Stop them forever."
+
+                    — SOC-AML Risk Engine, Mirror Sandbox Defense
+
+================================================================================
